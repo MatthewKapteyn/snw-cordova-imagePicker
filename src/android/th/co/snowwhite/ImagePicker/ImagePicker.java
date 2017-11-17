@@ -12,6 +12,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 
+import android.os.Bundle;
 import android.app.Activity;
 import android.content.Intent;
 import android.util.Log;
@@ -83,5 +84,9 @@ public class ImagePicker extends CordovaPlugin {
 		} else {
 			this.callbackContext.error("No images selected");
 		}
+	}
+	
+	public void onRestoreStateForActivityResult(Bundle state, CallbackContext callbackContext) {
+		this.callbackContext = callbackContext;
 	}
 }
