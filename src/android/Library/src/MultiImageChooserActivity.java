@@ -39,6 +39,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -81,6 +82,10 @@ import android.widget.BaseAdapter;
 import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import android.os.Build;
+import android.content.pm.PackageManager;
+import android.Manifest;
 
 public class MultiImageChooserActivity extends Activity implements OnItemClickListener,
         LoaderManager.LoaderCallbacks<Cursor> {
@@ -137,63 +142,83 @@ public class MultiImageChooserActivity extends Activity implements OnItemClickLi
         fakeR = new FakeR(this);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         setContentView(fakeR.getId("layout", "multiselectorgrid"));
-        fileNames.clear();
+            
+        boolean permission_granted = true;
 
-        maxImages = getIntent().getIntExtra(MAX_IMAGES_KEY, NOLIMIT);
-        useOriginal = getIntent().getBooleanExtra(USE_ORIGINAL, false);
-        createThumbnail = getIntent().getBooleanExtra(CREATE_THUMBNAIL, false);
-        saveToDataDirectory = getIntent().getBooleanExtra(SAVE_TO_DATADIRECTORY, false);
-        desiredWidth = getIntent().getIntExtra(WIDTH_KEY, 0);
-        desiredHeight = getIntent().getIntExtra(HEIGHT_KEY, 0);
-        quality = getIntent().getIntExtra(QUALITY_KEY, 0);
-        maxImageCount = maxImages;
-
-        Display display = getWindowManager().getDefaultDisplay();
-        int width = display.getWidth();
-
-        colWidth = width / 4;
-
-        gridView = (GridView) findViewById(fakeR.getId("id", "gridview"));
-        gridView.setOnItemClickListener(this);
-        gridView.setOnScrollListener(new OnScrollListener() {
-            private int lastFirstItem = 0;
-            private long timestamp = System.currentTimeMillis();
-
-            @Override
-            public void onScrollStateChanged(AbsListView view, int scrollState) {
-                if (scrollState == SCROLL_STATE_IDLE) {
-                    shouldRequestThumb = true;
-                    ia.notifyDataSetChanged();
-                }
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
+            int hasReadExternalStoragePermission = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE);
+            List<String> m_permissions = new ArrayList<String>();
+            if (hasReadExternalStoragePermission != PackageManager.PERMISSION_GRANTED) {
+                m_permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+                permission_granted = false;
             }
-
-            @Override
-            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
-                float dt = System.currentTimeMillis() - timestamp;
-                if (firstVisibleItem != lastFirstItem) {
-                    double speed = 1 / dt * 1000;
-                    lastFirstItem = firstVisibleItem;
-                    timestamp = System.currentTimeMillis();
-
-                    // Limit if we go faster than a page a second
-                    shouldRequestThumb = speed < visibleItemCount;
-                }
+            if (m_permissions.size() > 0){
+                String[] m_permissions_string = new String[m_permissions.size()];
+                m_permissions.toArray(m_permissions_string);
+                requestPermissions(m_permissions_string, 1001);
             }
-        });
+        }
 
-        ia = new ImageAdapter(this);
-        gridView.setAdapter(ia);
+        if (permission_granted){   
+            
+            fileNames.clear();
 
-        statusBarValue = (TextView) findViewById(fakeR.getId("id", "statusbar_value"));
+            maxImages = getIntent().getIntExtra(MAX_IMAGES_KEY, NOLIMIT);
+            useOriginal = getIntent().getBooleanExtra(USE_ORIGINAL, false);
+            createThumbnail = getIntent().getBooleanExtra(CREATE_THUMBNAIL, false);
+            saveToDataDirectory = getIntent().getBooleanExtra(SAVE_TO_DATADIRECTORY, false);
+            desiredWidth = getIntent().getIntExtra(WIDTH_KEY, 0);
+            desiredHeight = getIntent().getIntExtra(HEIGHT_KEY, 0);
+            quality = getIntent().getIntExtra(QUALITY_KEY, 0);
+            maxImageCount = maxImages;
 
-        LoaderManager.enableDebugLogging(false);
-        getLoaderManager().initLoader(CURSORLOADER_THUMBS, null, this);
-        getLoaderManager().initLoader(CURSORLOADER_REAL, null, this);
-        setupHeader();
-        updateAcceptButton();
-        progress = new ProgressDialog(this);
-        progress.setTitle(getString(fakeR.getId("string", "processing")));
-        progress.setMessage(getString(fakeR.getId("string", "processing_time")));
+            Display display = getWindowManager().getDefaultDisplay();
+            int width = display.getWidth();
+
+            colWidth = width / 4;
+
+            gridView = (GridView) findViewById(fakeR.getId("id", "gridview"));
+            gridView.setOnItemClickListener(this);
+            gridView.setOnScrollListener(new OnScrollListener() {
+                private int lastFirstItem = 0;
+                private long timestamp = System.currentTimeMillis();
+
+                @Override
+                public void onScrollStateChanged(AbsListView view, int scrollState) {
+                    if (scrollState == SCROLL_STATE_IDLE) {
+                        shouldRequestThumb = true;
+                        ia.notifyDataSetChanged();
+                    }
+                }
+
+                @Override
+                public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
+                    float dt = System.currentTimeMillis() - timestamp;
+                    if (firstVisibleItem != lastFirstItem) {
+                        double speed = 1 / dt * 1000;
+                        lastFirstItem = firstVisibleItem;
+                        timestamp = System.currentTimeMillis();
+
+                        // Limit if we go faster than a page a second
+                        shouldRequestThumb = speed < visibleItemCount;
+                    }
+                }
+            });
+
+            ia = new ImageAdapter(this);
+            gridView.setAdapter(ia);
+
+            statusBarValue = (TextView) findViewById(fakeR.getId("id", "statusbar_value"));
+
+            LoaderManager.enableDebugLogging(false);
+            getLoaderManager().initLoader(CURSORLOADER_THUMBS, null, this);
+            getLoaderManager().initLoader(CURSORLOADER_REAL, null, this);
+            setupHeader();
+            updateAcceptButton();
+            progress = new ProgressDialog(this);
+            progress.setTitle(getString(fakeR.getId("string", "processing")));
+            progress.setMessage(getString(fakeR.getId("string", "processing_time")));
+        }
     }
 
     @Override
