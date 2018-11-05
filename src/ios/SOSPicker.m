@@ -10,6 +10,8 @@
 #import "ELCAlbumPickerController.h"
 #import "ELCImagePickerController.h"
 #import "ELCAssetTablePicker.h"
+#import <ImageIO/ImageIO.h>
+#import <AssetsLibrary/AssetsLibrary.h>
 
 #define CDV_PHOTO_PREFIX @"snw_photo_"
 
@@ -76,7 +78,6 @@
     NSString *fileExtension = @"jpg";
     ALAsset* asset = nil;
     UIImageOrientation orientation = UIImageOrientationUp;;
-    CGSize targetSize = CGSizeMake(self.width, self.height);
     for (NSDictionary *dict in info) {
         asset = [dict objectForKey:@"ALAsset"];
         // From ELCImagePickerController.m
@@ -85,16 +86,21 @@
             ALAssetRepresentation *assetRep = [asset defaultRepresentation];
             CGImageRef imgRef = NULL;
             
-            if(self.useOriginal) {
+            // Only use original image if it's a jpg. Front end does not handle PNG or HEIC files
+            // NOTICE: Not using the original image means we lose most EXIF data
+            if (self.useOriginal && assetRep.UTI == @"public.jpg") {
                 
                 buffer = (Byte*)malloc(assetRep.size);
                 buffered = [assetRep getBytes:buffer fromOffset:0 length:assetRep.size error:nil];
                 data = [NSData dataWithBytesNoCopy:buffer length:buffered freeWhenDone:YES];
                 
+                // Set the extension correctly, however anything but a jpg will fail in later processing
                 if ([assetRep.UTI isEqualToString:@"public.png"]) {
                     fileExtension = @"png";
                 } else if([assetRep.UTI isEqualToString:@"public.jpg"]) {
                     fileExtension = @"jpg";
+                } else if([assetRep.UTI isEqualToString:@"public.heic"]) {
+                    fileExtension = @"heic";
                 }
                 
             } else {
@@ -111,16 +117,17 @@
                     imgRef = [assetRep fullScreenImage];
                 }
                 
+                // Get date taken of the asset to ensure we don't lose this property
+                NSDate *DateTaken = [asset valueForProperty:@"ALAssetPropertyDate"];
+                NSString *DateString = [self getUTCFormattedDate:DateTaken];
+                
+                // Get UIImage object with correct scale and orientation
                 UIImage* image = [UIImage imageWithCGImage:imgRef scale:1.0f orientation:orientation];
-                if (self.width == 0 && self.height == 0) {
-                    data = UIImageJPEGRepresentation(image, self.quality/100.0f);
-                } else {
-                    UIImage* scaledImage = [self imageByScalingNotCroppingForSize:image toSize:targetSize];
-                    data = UIImageJPEGRepresentation(scaledImage, self.quality/100.0f);
-                }
+                
+                // Build NSData while inserting the correct Exif OriginalDateTaken
+                data = [self getImageWithMetaData:image:DateString];
                 
                 fileExtension = @"jpg";
-                
             }
             
             do {
@@ -216,6 +223,70 @@
     // pop the context to get back to the default
     UIGraphicsEndImageContext();
     return newImage;
+}
+
+- (NSString *)getUTCFormattedDate:(NSDate *)localDate {
+    static NSDateFormatter *dateFormatter = nil;
+    if (dateFormatter == nil) {
+        dateFormatter = [[NSDateFormatter alloc] init];
+        [dateFormatter setDateFormat:@"yyyy:MM:dd HH:mm:ss"];
+    }
+    NSString *dateString = [dateFormatter stringFromDate:localDate];
+    return dateString;
+}
+
+-(NSMutableData *)getImageWithMetaData:(UIImage *)pImage :(NSString *)DateTakenUTCString
+{
+    // Create data object for containing the image
+    NSData* jpgData = nil;
+    
+    // Get the correct jpg data with desired image quality and scaling
+    if (self.width == 0 && self.height == 0) {
+        jpgData = UIImageJPEGRepresentation(pImage, self.quality/100.0f);
+    } else {
+        CGSize targetSize = CGSizeMake(self.width, self.height);
+        UIImage* scaledImage = [self imageByScalingNotCroppingForSize:pImage toSize:targetSize];
+        jpgData = UIImageJPEGRepresentation(scaledImage, self.quality/100.0f);
+    }
+    
+    CGImageSourceRef source = CGImageSourceCreateWithData((CFDataRef)jpgData, NULL);
+    NSDictionary *metadata = (NSDictionary *) CFBridgingRelease(CGImageSourceCopyPropertiesAtIndex(source, 0, NULL));
+    
+    NSMutableDictionary *metadataAsMutable = [metadata mutableCopy];
+    
+    //For EXIF Dictionary
+    NSMutableDictionary *EXIFDictionary = [[metadataAsMutable objectForKey:(NSString *)kCGImagePropertyExifDictionary]mutableCopy];
+    if(!EXIFDictionary)
+        EXIFDictionary = [NSMutableDictionary dictionary];
+    
+    // Sets the desired Exif properties we want to keep
+    [EXIFDictionary setObject:DateTakenUTCString forKey:(NSString*)kCGImagePropertyExifDateTimeOriginal];
+    [EXIFDictionary setObject:DateTakenUTCString forKey:(NSString*)kCGImagePropertyExifDateTimeDigitized];
+    
+    //add our modified EXIF data back into the image's metadata
+    [metadataAsMutable setObject:EXIFDictionary forKey:(NSString *)kCGImagePropertyExifDictionary];
+    
+    CFStringRef UTI = CGImageSourceGetType(source);
+    
+    NSMutableData *dest_data = [NSMutableData data];
+    CGImageDestinationRef destination = CGImageDestinationCreateWithData((CFMutableDataRef)dest_data, UTI, 1, NULL);
+    
+    if(!destination)
+        dest_data = [jpgData mutableCopy];
+    else
+    {
+        CGImageDestinationAddImageFromSource(destination, source, 0, (CFDictionaryRef) metadataAsMutable);
+        BOOL success = CGImageDestinationFinalize(destination);
+        if(!success)
+            dest_data = [jpgData mutableCopy];
+    }
+    
+    if(destination)
+        CFRelease(destination);
+    
+    CFRelease(source);
+    
+    return dest_data;
 }
 
 @end
