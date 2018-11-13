@@ -1,0 +1,26 @@
+{
+  "name": "th.co.snowwhite.imagepicker",
+  "version": "1.0.7",
+  "description": "ImagePicker",
+  "cordova": {
+    "id": "th.co.snowwhite.imagepicker",
+    "platforms": [
+      "windows"
+    ]
+  },
+  "keywords": [
+    "cordova",
+    "imagepicker",
+    "multiple",
+    "images",
+    "ecosystem:cordova",
+    "cordova-windows"
+  ],
+  "devDependencies": {
+    "eslint": "^1.1",
+    "eslint-config-semistandard": "^5.0",
+    "eslint-config-standard": "^4.0"
+  },
+  "author": "Matthew Kapteyn",
+  "license": "The MIT License (MIT)"
+}
